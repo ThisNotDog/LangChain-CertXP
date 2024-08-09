@@ -1,17 +1,13 @@
-import os
 import csv
 from langchain_openai import ChatOpenAI
 from typing import Optional
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
 
-OPENAI_API_KEY = os.environ["OPENAI_API_KEY"] 
 llm = ChatOpenAI(model="gpt-4o-mini")
 
+# Pydantic object formatting; declares outputs as variables 
 class Question(BaseModel):
-    """
-    Class for rewriting CertXP questions with answers and answer reason
-    """
 
     newQuestion: str = Field(description="Updated version of original question")
     correctAnswer: str = Field(description="Question answer reason")
@@ -20,12 +16,16 @@ class Question(BaseModel):
     incorrectAnswer2: str = Field(description="Incorrect answer 2")
     incorrectAnswer3: str = Field(description="Incorrect answer 3")
 
+# System message of few-shot prompts fed to LLM w/each output
+# First paragraph declares the Agent's role and provides descriptions for each task
+# example_user & example_assistant are examples of input/output expectations
+# This is appended to each API request
 system = """You are a CompTIA certification exam expert. Your speciality is IT fundamentals. Rewrite the following question as a different scenario with the same purpose (newQuestion) provide a short one-line correct answer (correctAnswer) a short one-paragraph explanation why the answer is correct (answerReason), and 3 separate incorrect answers that are related to the question in some way (incorrectAnswer 1 2 & 3)
 
 Here are some examples of this process:
 
 example_user: A laptop PC user is reporting issues with the hard drive. A filesystem check shows that all files are accessible and the filesystem is clean. After the check, the PC still issues a hard drive error message. Which of the following is the MOST likely cause of the error?
-example_assistant: {{"newQuestion": "A server administrator is experiencing problems with the server's HDD. Despite running a thorough diagnostic test that confirms all data is accessible and the filesystem is intact, the server continues to display an HDD error warning. Which of the following is the MOST likely cause of the error?", "correctAnswer": "S.M.A.R.T failure", "answerReason": "The answer "S.M.A.R.T failure" is correct because S.M.A.R.T (Self-Monitoring, Analysis, and Reporting Technology) is a monitoring system included in hard disk drives (HDDs) that detects and reports various indicators of drive reliability. Even if a diagnostic test confirms data accessibility and a clean filesystem, an HDD can still show an error if its S.M.A.R.T system detects potential issues that could lead to imminent drive failure, such as bad sectors, high temperatures, or other reliability concerns. This early warning allows the administrator to take preventive actions before a catastrophic drive failure occurs.", "incorrectAnswer1": "DIMM failure", "incorrectAnswer2": "IOPS failure", "incorrectAnswer3": "RAID failure"}}
+example_assistant: {{newQuestion": "A server administrator is experiencing problems with the server's HDD. Despite running a thorough diagnostic test that confirms all data is accessible and the filesystem is intact, the server continues to display an HDD error warning. Which of the following is the MOST likely cause of the error?", "correctAnswer": "S.M.A.R.T failure", "answerReason": "The answer "S.M.A.R.T failure" is correct because S.M.A.R.T (Self-Monitoring, Analysis, and Reporting Technology) is a monitoring system included in hard disk drives (HDDs) that detects and reports various indicators of drive reliability. Even if a diagnostic test confirms data accessibility and a clean filesystem, an HDD can still show an error if its S.M.A.R.T system detects potential issues that could lead to imminent drive failure, such as bad sectors, high temperatures, or other reliability concerns. This early warning allows the administrator to take preventive actions before a catastrophic drive failure occurs.", "incorrectAnswer1": "DIMM failure", "incorrectAnswer2": "IOPS failure", "incorrectAnswer3": "RAID failure}}
 
 example_user: A laptop has been returned for a screen repair. The owner insists the screen is broken, but occasionally a faded image is able to be seen in very bright settings on the desktop. Which of the following steps should the repair technician take FIRST? Which of the following is the MOST likely cause of the error?
 example_assistant: {{"newQuestion": "A laptop has been brought in for screen repair. The user claims the screen is broken, but sometimes a faint image is visible when viewed under bright light. Which of the following steps should the repair technician take FIRST?", "correctAnswer": "Ensure the backlight is functioning", "answerReason": "Ensuring the backlight is functioning is correct because the faint image visible under bright light indicates that the LCD panel itself is still working, but the backlight, which illuminates the display, may not be functioning properly. The backlight is essential for making the screen image visible in normal lighting conditions. If it fails, the display may appear very dim or completely dark, even though the LCD is still producing an image. Therefore, the technician should first check and ensure the backlight is operational before considering other potential issues with the screen.", "incorrectAnswer1": "Replace the graphics card", "incorrectAnswer2": "Replace the screen", "incorrectAnswer3": "Recommend an external display"}}
@@ -33,15 +33,18 @@ example_assistant: {{"newQuestion": "A laptop has been brought in for screen rep
 example_user: A user is researching hard drives to upgrade a PC and has decided to purchase a NVMe drive. Which of the following should the user confirm are available on the PC before making the purchase?
 example_assistant: {{"newQuestion": "A user is planning to upgrade their PC's storage and has decided to purchase an NVMe SSD. Which of the following should the user confirm is available on the PC before making the purchase?", "correctAnswer": "M.2", "answerReason": "M.2 is correct because NVMe SSDs typically use the M.2 form factor, which requires a corresponding M.2 slot on the motherboard for installation. The M.2 slot is specifically designed to accommodate the compact and high-speed NVMe drives, allowing them to leverage the PCIe interface for faster data transfer rates compared to traditional SATA drives. Before purchasing an NVMe SSD, the user must ensure that their PC's motherboard has an available M.2 slot that supports NVMe, ensuring compatibility and optimal performance.", "incorrectAnswer1": "USB-C", "incorrectAnswer2": "HDMI", "incorrectAnswer3": "VGA"}}"""
 
+# Application of Pydantic object
 structured_llm = llm.with_structured_output(Question)
 
+# Application of system message; {system}
 prompt = ChatPromptTemplate.from_messages([("system", system), ("human", "{input}")])
 
+# Chain, events happen in order
 few_shot_structured_llm = prompt | structured_llm
 
+# Return from LLM
 result = few_shot_structured_llm.invoke("Which of the following cloud models maintains access, even when a local internet outage occurs?")
 
 with open('output.csv', mode='w', newline='') as file:
     writer = csv.writer(file)
     writer.writerows(result)
-    writer.close()
